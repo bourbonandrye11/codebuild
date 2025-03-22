@@ -1,0 +1,51 @@
+version: 0.2
+env:
+  variables:
+    AWS_REGION: "us-east-1"
+#  parameter-store:
+#    key: "value"
+#  secrets-manager:
+#    key: secret-id:json-key
+phases:
+  install:
+    runtime-versions:
+      python: 3.13
+      golang: 1.23
+    on-failure: ABORT
+    commands: |
+      sudo apt-get update && sudo apt-get install -y gnupg software-properties-common
+      wget -O- https://apt.releases.hashicorp.com/gpg | gpg --dearmor | \
+      sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+      gpg --no-default-keyring \
+      --keyring /usr/share/keyrings/hashicorp-archive-keyring.gpg \
+      --fingerprint
+      echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] \
+      https://apt.releases.hashicorp.com $(lsb_release -cs) main" | \
+      sudo tee /etc/apt/sources.list.d/hashicorp.list
+      sudo apt update
+      sudo apt-get install terraform
+
+  pre_build:
+#    run-as: username
+    on-failure: CONTINUE
+    commands:
+      - $(aws ecr get-login --no-include-email --region $AWS_REGION)
+#    finally:
+#     - echo "clean up"
+  build:
+    on-failure: ABORT
+    commands:
+      - terraform -chdir=terraform init -input=false
+      - terraform -chdir=terraform plan -input=false
+      - docker build -f ./docker/Dockerfile -t public.ecr.aws/x2j7z4y4/docker_test:aws
+      - docker push public.ecr.aws/x2j7z4y4/docker_test:aws
+  post_build:
+    on-failure: CONTINUE
+    commands:
+      - echo "last stuff"
+#    finally:
+#      - echo "clean up last stuff"
+#  artifacts:
+#    files:
+#      - '**/*'
+#    name: artifact-name
